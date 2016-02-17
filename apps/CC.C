@@ -22,6 +22,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "ligra.h"
+#include "unionFind.h"
 #include <cmath>
 
 /*
@@ -32,7 +33,6 @@ alg:
     - expand frontier using CAS to acquire
 - now, have a map from id -> cluster_id
 - run parallel union-find. only care about inter-component edges
-- 
 */
 
 
@@ -68,6 +68,36 @@ struct CC_F {
   }
   //cond function checks if vertex has been visited yet
   inline bool cond (uintE d) { return (components[d] == UINT_E_MAX); }
+};
+
+
+struct Union_Find_F {
+  uintE* components;
+  unionFind UF;
+  Union_Find_F(uintE* _components, unionFind& _UF) : 
+    components(_components), UF(_UF) {}
+  inline void atomicUF(uintE s, uintE d) {
+    while(true) {
+      long ps = UF.find(s);
+      long pd = UF.find(d);
+      if (ps == pd) {
+        return;
+      }
+      UF.link(ps,pd);
+    }
+  }
+  inline bool update (uintE s, uintE d) { //Update
+    if (components[s] != components[d]) {
+      atomicUF(s,d);
+    }
+    return 1;
+  }
+  inline bool updateAtomic (uintE s, uintE d) { //atomic version of Update
+    atomicUF(s,d);
+    return 1;
+  }
+  // check all edges
+  inline bool cond (uintE d) { return 1; }
 };
 
 template <class vertex>
@@ -149,15 +179,39 @@ void Compute(graph<vertex>& GA, commandLine P) {
     writeAdd<long>(&ic_edges, our_ic);
   }
 
-  for (int i = 0; i < n; i++) {
-    cout << "components[i] = " << components[i] << endl;
-  }
+//  for (int i = 0; i < n; i++) {
+//    cout << "components[i] = " << components[i] << endl;
+//  }
 
   cout << "m = " << GA.m << endl;
   cout << "ic edges = " << ic_edges << endl;
 
-  cout << "done" << endl;
-  
+   
   Frontier.del();
+
+  bool* ones = newA(bool, n);
+  {parallel_for(uintE i=0; i<n; i++) ones[i] = true;}
+  Frontier = vertexSubset(n, n, ones);
+
+  unionFind UF(n); 
+
+  {parallel_for(long i=0; i<n; i++) {
+    if (i != components[i]) {
+      UF.link(i, components[i]);
+    }
+  }}
+
+  cout << "before em" << endl;
+  edgeMap(GA, Frontier, Union_Find_F(components, UF), GA.m/20);
+  cout << "after em" << endl;
+
+  long num_c = 0;
+  parallel_for(int i=0; i<n; i++) {
+    if (UF.find(i) == i) {
+      writeAdd<long>(&num_c, 1);
+    }
+  }
+  cout << "numC is : " << num_c  << endl;
+
   free(components); 
 }
