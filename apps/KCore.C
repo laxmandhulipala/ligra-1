@@ -54,22 +54,112 @@ struct KCore_Vertex_F {
   }
 };
 
-// 1) iterate over all remaining active vertices
-// 2) for each active vertex, remove if induced degree < k. Any vertex removed has
-//    core-number (k-1) (part of (k-1)-core, but not k-core)
-// 3) stop once no vertices are removed. Vertices remaining are in the k-core.
+struct Filter_Less {
+  uintT* D;
+  int k;
+  Filter_Less(uintT* _D, int _k) : 
+    D(_D), k(_k) {}
+
+  inline bool operator () (uintE i) {
+    return (D[i] < k);
+  }
+};
+
+struct Filter_GtE {
+  uintT* D;
+  int k;
+  Filter_GtE(uintT* _D, int _k) : 
+    D(_D), k(_k) {}
+
+  inline bool operator () (uintE i) {
+    return (D[i] >= k);
+  }
+};
+
+struct KCore_F {
+  uintT* D;
+  int k;
+  KCore_F(uintT* _D, int _k) : D(_D), k(_k) {}
+  inline bool update (uintE s, uintE d) {
+//    D[d]--;
+    writeAdd<uintT>(&D[d],-1);
+    return 1;
+  }
+  inline bool updateAtomic (uintE s, uintE d) {
+    writeAdd<uintT>(&D[d],-1);
+    return 1;
+  }
+  inline bool cond (uintE d) { return 1; }
+};
+
 template <class vertex>
 void Compute(graph<vertex>& GA, commandLine P) {
   const long n = GA.n;
   bool* active = newA(bool,n);
   {parallel_for(long i=0;i<n;i++) active[i] = 1;}
   vertexSubset Frontier(n, n, active);
-  long* coreNumbers = newA(long, n);
-  {parallel_for(long i=0;i<n;i++) coreNumbers[i] = 0;}
-  long k;
+
+  // holds induced degree
+  uintT* D = newA(uintT, n);
+  {parallel_for(long i=0;i<n;i++) D[i] = GA.V[i].getOutDegree();}
+
   long numActive = n;
   long largestCore = -1;
-  for (k = 1; k <= n; k++) {
+  for (int k = 1; k <= n; k++) {
+    long numRemoved = 0;
+    while (true) {
+      numActive = Frontier.numNonzeros();
+      cout << "k = " << k << " numActive = " << numActive << endl;
+
+      // A is the set of vertices removed in this round
+      vertexSubset A = vertexFilter(Frontier, Filter_Less(D, k));
+      if (A.isEmpty()) {
+        if (k >= 8) {
+          Frontier.toDense();
+          for (int i = 0; i < n; i++) {
+            if (Frontier.d[i]) {
+              cout << " i : " << i << " and " << D[i] << endl;
+            }
+          }
+        }
+        break;
+      }
+
+      // decrement induced degree of all nghs of A
+      edgeMap(GA, A, KCore_F(D, k), GA.m/20);
+
+      // recalculate frontier
+      vertexSubset B = vertexFilter(Frontier, Filter_GtE(D, k));
+ 
+      Frontier.del();
+      Frontier = B;
+    }
+    if (numActive == 0) {
+      largestCore = k-1;
+      break;
+    }
+  }
+  cout << "largestCore was " << largestCore << endl;
+  Frontier.del();
+  free(D);
+}
+
+// 1) iterate over all remaining active vertices
+// 2) for each active vertex, remove if induced degree < k. Any vertex removed has
+//    core-number (k-1) (part of (k-1)-core, but not k-core)
+// 3) stop once no vertices are removed. Vertices remaining are in the k-core.
+template <class vertex>
+void Compute2(graph<vertex>& GA, commandLine P) {
+  const long n = GA.n;
+  bool* active = newA(bool,n);
+  {parallel_for(long i=0;i<n;i++) active[i] = 1;}
+  vertexSubset Frontier(n, n, active);
+  long* coreNumbers = newA(long, n);
+  {parallel_for(long i=0;i<n;i++) coreNumbers[i] = 0;}
+
+  long numActive = n;
+  long largestCore = -1;
+  for (int k = 1; k <= n; k++) {
     long numRemoved = 0;
     while (true) {
       long prevActive = numActive;
