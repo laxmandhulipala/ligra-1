@@ -30,8 +30,10 @@ alg:
 - while (exists unvisited vertices) :
     - add in any centers that should start on this step
     - expand frontier using CAS to acquire
+- now, have a map from id -> cluster_id
+- run parallel union-find. only care about inter-component edges
+- 
 */
-
 
 
 /**
@@ -55,8 +57,8 @@ struct CC_F {
   uintE* components;
   CC_F(uintE* _components) : components(_components) {}
   inline bool update (uintE s, uintE d) { //Update
-    if(components[d] == UINT_E_MAX) { 
-      components[d] = components[s]; 
+    if (components[d] == UINT_E_MAX) {
+      components[d] = components[s];
       return 1; 
     }
     else return 0;
@@ -83,13 +85,6 @@ void Compute(graph<vertex>& GA, commandLine P) {
 
   intT* flags = newA(intT, n+1);
 
-  for (int i = 0; i < n; i++) {
-    long degree = GA.V[i].getOutDegree();
-    if (degree == 0) {
-      cout << "deg is 0 for vtx : " << i << endl;
-    }
-  }
-
   vertexSubset Frontier(n); 
   long totalVisited = 0;
   intT round = 0;
@@ -113,9 +108,6 @@ void Compute(graph<vertex>& GA, commandLine P) {
     // For now, I will just create a new frontier explicitly and fix this with
     // a more optimized version soon. 
     
-    cout << "at start, numNonzeros = " << Frontier.numNonzeros() << endl;
-    cout << "size is : " << size << endl;
-    cout << "frontier.d = " << (Frontier.d == NULL) << endl;
     if (!Frontier.isEmpty()) {
       Frontier.toSparse();
     }
@@ -146,18 +138,26 @@ void Compute(graph<vertex>& GA, commandLine P) {
     round += 1;
   }
 
-  cout << "out mang\n";
+  long ic_edges = 0;
+  parallel_for (int i = 0; i < n; i++) {
+    long our_ic = 0;
+    for (int j = 0; j < GA.V[i].getOutDegree(); j++) {
+      if (components[i] != components[GA.V[i].getOutNeighbor(j)]) {
+        our_ic++;
+      }
+    }
+    writeAdd<long>(&ic_edges, our_ic);
+  }
+
+  for (int i = 0; i < n; i++) {
+    cout << "components[i] = " << components[i] << endl;
+  }
+
+  cout << "m = " << GA.m << endl;
+  cout << "ic edges = " << ic_edges << endl;
+
+  cout << "done" << endl;
   
   Frontier.del();
-
-//
-//
-//
-//  while(!Frontier.isEmpty()){ //loop until frontier is empty
-//    vertexSubset output = edgeMap(GA, Frontier, CC_F(components),GA.m/20);    
-//    Frontier.del();
-//    Frontier = output; //set new frontier
-//  } 
-//  Frontier.del();
-//  free(components); 
+  free(components); 
 }
