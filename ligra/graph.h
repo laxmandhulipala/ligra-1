@@ -5,6 +5,7 @@
 #include <fstream>
 #include <stdlib.h>
 #include "parallel.h"
+#include "vertexSubset.h"
 using namespace std;
 
 // **************************************************************
@@ -90,11 +91,60 @@ asymmetricVertex(intE* iN, intE* oN, uintT id, uintT od)
   void flipEdges() { swap(inNeighbors,outNeighbors); swap(inDegree,outDegree); }
 };
 
+// problem: want to expose an abstract graph to the programmer. 
+// don't want to leak implementation details
+// what to expose?
+/*
+  - n , m
+  - maybe implement vertex methods (accessors) in graph itself?
+    a la: 
+      GA.getOutDegree(i)
+      GA.getInDegree(i)
+*/
+
+struct Edge_F {
+public:
+  virtual inline bool update (uintE s, uintE d) {
+    return updateAtomic(s,d);
+  }
+  virtual inline bool updateAtomic (uintE s, uintE d) = 0;
+  virtual inline bool cond (uintE d) = 0;
+};
+
+struct abstract_graph {
+public:
+  virtual long getN() = 0;
+  virtual long getM() = 0;
+  virtual void transpose() = 0;
+  virtual void del() = 0;
+
+  // api fns
+  virtual vertexSubset edgeMap(vertexSubset &V, Edge_F& f, 
+    intT threshold = -1, char option=DENSE, bool remDups=false) = 0;
+
+  // vertex helper-fns
+  virtual long getOutDegree(long i) = 0;
+  virtual long getInDegree(long i) = 0;
+};
+
 template <class vertex>
-struct graph {
+struct graph : public abstract_graph {
+public:
   vertex *V;
   long n;
   long m;
+
+  long getN() { return n; }
+  long getM() { return m; }
+
+  long getOutDegree(long i) {
+    return V[i].getOutDegree();
+  }
+
+  long getInDegree(long i) {
+    return V[i].getInDegree();
+  }
+
 #ifndef WEIGHTED
   uintE* allocatedInplace, * inEdges;
 #else
@@ -126,5 +176,9 @@ struct graph {
       transposed = !transposed;
     } 
   }
+
+  vertexSubset edgeMap(vertexSubset &V, Edge_F& f, intT threshold = -1, 
+       char option=DENSE, bool remDups=false);
+
 };
 #endif

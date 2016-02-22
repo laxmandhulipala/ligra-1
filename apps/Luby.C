@@ -130,9 +130,9 @@ void Compute(graph<vertex>& GA, commandLine P) {
     // assign priorities. set all active vertices to be in MIS
     vertexMap(Frontier, Luby_Vertex_F(priorities, inMis));
     // compare priorities. unset from MIS if p(u) > p(v) for any (u,v)
-    edgeMap(GA, Frontier, Luby_P1(priorities, active, inMis), GA.m/20);
+    GA.edgeMap(Frontier, Luby_P1(priorities, active, inMis), GA.m/20);
     // make vertex inactive if for any (u,v) v \in MIS
-    edgeMap(GA, Frontier, Luby_P2(active, inMis), GA.m/20);
+    GA.edgeMap(Frontier, Luby_P2(active, inMis), GA.m/20);
     vertexSubset output = vertexFilter(Frontier, Luby_Filter(active, inMis));
     Frontier.del();
     Frontier = output;

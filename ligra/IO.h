@@ -27,6 +27,8 @@
 #include <stdlib.h>
 #include "parallel.h"
 #include "quickSort.h"
+#include "ligra.h"
+
 using namespace std;
 
 typedef pair<uintE,uintE> intPair;

@@ -23,7 +23,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "ligra.h"
 
-struct BFS_F {
+struct BFS_F : public Edge_F {
+public:
   uintE* Parents;
   BFS_F(uintE* _Parents) : Parents(_Parents) {}
   inline bool update (uintE s, uintE d) { //Update
@@ -37,18 +38,21 @@ struct BFS_F {
   inline bool cond (uintE d) { return (Parents[d] == UINT_E_MAX); } 
 };
 
-template <class vertex>
-void Compute(graph<vertex>& GA, commandLine P) {
+//template <class vertex>
+void Compute(abstract_graph& GA, commandLine P) {
   long start = P.getOptionLongValue("-r",0);
-  long n = GA.n;
+  long n = GA.getN();
   //creates Parents array, initialized to all -1, except for start
   uintE* Parents = newA(uintE,n);
   parallel_for(long i=0;i<n;i++) Parents[i] = UINT_E_MAX;
   Parents[start] = start;
   vertexSubset Frontier(n,start); //creates initial frontier
 
+  long ctr = 0;
+  BFS_F f = BFS_F(Parents);
+  long thresh = GA.getM()/20;
   while(!Frontier.isEmpty()){ //loop until frontier is empty
-    vertexSubset output = edgeMap(GA, Frontier, BFS_F(Parents),GA.m/20);    
+    vertexSubset output = GA.edgeMap(Frontier, f, thresh);
     Frontier.del();
     Frontier = output; //set new frontier
   } 
